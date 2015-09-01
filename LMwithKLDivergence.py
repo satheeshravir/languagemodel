@@ -7,15 +7,19 @@ import math
 import string
 import random
 
+#Generates random secret key
 def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
+#Caculates Kullback-Leiber measure given the ngram (unigram, bigram) list of question and answer
 def kullbackLeibler(question,answer):
-    #quesFD = BigramCollocationFinder._ngram_freqdist(questionList,2)
-    #print quesFD.tabulate 
+    #Frequency distribution of question
     questionFD = nltk.FreqDist(question)
+    #Frequency distribution of answer
     ansFD = nltk.FreqDist(answer)
+    #KL distance measure
     d = 0
+    #For each ngram in the answer 
     for ans in answer:
         prob_ans = float(ansFD[ans])/len(answer)
         prob_test = float((questionFD[ans]+1))/(len(answer)+len(question))
@@ -127,5 +131,6 @@ if __name__ == "__main__":
     else:
         print "Key",bigramKey,"ACCURACY",str(accuracyBigram)
         print "Key",unigramKey,"ACCURACY",str(accuracyUnigram)
+
 
 
