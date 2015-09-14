@@ -1,5 +1,5 @@
-'''Sample excecution command
-python languageModel.py /home/maxsteal/Downloads/labeledTrainData.tsv'''
+'''Sample excecution command 
+python LMwithKLDivergence.py corpus.txt test.txt'''
 
 import nltk
 import sys
@@ -7,28 +7,38 @@ import math
 import string
 import random
 
-#Generates random secret key
 def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
-#Caculates Kullback-Leiber measure given the ngram (unigram, bigram) list of question and answer
-def kullbackLeibler(question,answer):
-    #Frequency distribution of question
-    questionFD = nltk.FreqDist(question)
-    #Frequency distribution of answer
-    ansFD = nltk.FreqDist(answer)
-    #KL distance measure
-    d = 0
-    #For each ngram in the answer 
-    for ans in answer:
-        prob_ans = float(ansFD[ans])/len(answer)
-        prob_test = float((questionFD[ans]+1))/(len(answer)+len(question))
-        logx = prob_test/prob_ans
-        calculation = prob_test * math.log(logx)
-        d = d + calculation
-    return d
 
-        
+def kullbackLeibler(question,answer):
+    #create a joint list
+    jointList = question + answer
+    #Set will avoid duplicates
+    jointSet = set(jointList)
+    #Generate frequency dist of test sentence
+    questionFD = nltk.FreqDist(question)
+    totalQuestionCount = len(question)
+    totalAnswerCount = len(answer)
+    #Generate frequency dist of answer
+    ansFD = nltk.FreqDist(answer)
+    jointFD = nltk.FreqDist(jointList)
+    d = 0.0
+    for ngram in jointSet:
+        #Calculate the probability dist of specific ngram in answer sentence
+        probAnsDist = float(ansFD[ngram])/totalAnswerCount
+        #Calculate the joint probability dist of specific ngram
+        jointProb = float(jointFD[ngram])/len(jointList)
+        #Add smoothing to avoid zero division
+        ansSmoothing = float(probAnsDist* 0.90) + float(0.10 * jointProb)
+        #Calculate the probability dist of specific ngram in test sentence
+        probQuesDist = float(questionFD[ngram])/totalQuestionCount
+        logx = float(probQuesDist)/ansSmoothing
+        if probQuesDist != 0:
+            calculation = probQuesDist * math.log(logx)
+            #Add the corresponding ngram entropy to overall distance measure
+            d = d + calculation
+    return d
 
 #Bigram model for finding similar sentence in a big text file
 def bigram(sentenceList,test,fileObj,key):
@@ -41,6 +51,7 @@ def bigram(sentenceList,test,fileObj,key):
     sentence = ""
     resultLine = 1
     result = 0
+    kl_distance = {"entrophy":sys.maxint,"asnwer":""}
     #Iterate through each line in the text file
     for review in sentenceList:
         #Tokenize each sentence
@@ -52,6 +63,12 @@ def bigram(sentenceList,test,fileObj,key):
         bigrams = list(nltk.bigrams(tokens))
         bigramsFD = nltk.FreqDist(bigrams)
         prob = 1.0
+        entrophy = kullbackLeibler(test_bigrams,bigrams)
+        if kl_distance['entrophy'] > entrophy:
+            kl_distance['entrophy'] = entrophy
+            kl_distance['sentence'] = review
+        #print stats.entropy(test_bigrams,bigrams)
+        
         #Calculate the conditional probability of each bigram in the test sentence
         for test_bigram in test_bigrams:
             prob = prob * (bigramsFD[test_bigram]+1)/(fd[test_bigram[0]]+len(test_bigrams))
@@ -65,9 +82,12 @@ def bigram(sentenceList,test,fileObj,key):
     fileObj.write("Key: "+key+"\n")
     fileObj.write("Question: "+test+"\n")          
     fileObj.write("Result: "+sentence.strip()+"\n")
-    answer_tokens = [answer_token.lower() for answer_token in sentence.strip().split()]
-    answer_bigrams = list(nltk.bigrams(answer_tokens))
-    fileObj.write("Entropy: "+ str(kullbackLeibler(test_bigrams,answer_bigrams))+'\n\n')
+    fileObj.write("KL Entrophy Result: "+kl_distance['sentence'])
+    if kl_distance['sentence'] == sentence:
+        fileObj.write("KL Entrophy and Classifier results are same\n\n")
+    else:
+        fileObj.write("KL Entrophy and Classifier results are different\n\n")
+
     return result
 
 #Unigram model for finding similar sentence in a big text file    
@@ -75,24 +95,35 @@ def unigram(sentenceList,test,fileObj,key):
     maxProb = 0
     resultLine = 1
     sentence = ""
+    kl_distance = {"entrophy":sys.maxint,"asnwer":""}
+    test_unigrams = test.strip().lower().split()
     for review in sentenceList:
         counts={}
-        for word in review.strip().lower().split():
+        ans_unigrams =  review.strip().lower().split() 
+        for word in ans_unigrams:
             counts[word] = counts.get(word, 0) + 1
             total = sum(counts.values()) + len(counts)
             prob = 1.0
-        for w in test.strip().lower().split():
+        for w in test_unigrams:
             prob = prob * (float(counts.get(w, 0)+1)/total)
             if prob > maxProb:
                 maxProb = prob
                 sentence = review
                 result = resultLine
         resultLine = resultLine + 1
+        entrophy = kullbackLeibler(test_unigrams,ans_unigrams)
+        if kl_distance['entrophy'] > entrophy:
+            kl_distance['entrophy'] = entrophy
+            kl_distance['sentence'] = review
+
     fileObj.write("Key: "+key+"\n")
     fileObj.write("Question: "+test+"\n")          
     fileObj.write("Result: "+sentence.strip()+"\n")
-    answer_tokens = [answer_token.lower() for answer_token in sentence.strip().split()]
-    fileObj.write("Entropy: "+  str(kullbackLeibler(test.strip().lower().split(),answer_tokens))+'\n\n')
+    fileObj.write("KL Entrophy Result: "+kl_distance['sentence'])
+    if kl_distance['sentence'] == sentence:
+        fileObj.write("KL Entrophy and Classifier results are same\n\n")
+    else:
+        fileObj.write("KL Entrophy and Classifier results are different\n\n")
     return result
 
 if __name__ == "__main__":
@@ -126,11 +157,13 @@ if __name__ == "__main__":
     if accuracyBigram != 0:
         accuracyBigram = float(accuracyBigram)/len(inputData)
     if random.randrange(1,101) % 2:
-        print "Key",unigramKey,"ACCURACY",str(accuracyUnigram)
-        print "Key",bigramKey,"ACCURACY",str(accuracyBigram)
+        print "Secret Key:",unigramKey,"ACCURACY:",str(accuracyUnigram)
+        print "Secret Key:",bigramKey,"ACCURACY:",str(accuracyBigram)
     else:
-        print "Key",bigramKey,"ACCURACY",str(accuracyBigram)
-        print "Key",unigramKey,"ACCURACY",str(accuracyUnigram)
-
+        print "Secret Key:",bigramKey,"ACCURACY:",str(accuracyBigram)
+        print "Secret Key:",unigramKey,"ACCURACY:",str(accuracyUnigram)
+    referenceFile = open("reference.txt",'w')
+    referenceFile.write("Unigram: "+unigramKey+'\n')
+    referenceFile.write("Bigram: "+bigramKey+'\n')
 
 
