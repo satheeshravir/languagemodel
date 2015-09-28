@@ -115,8 +115,9 @@ def KLDivergence(answersModel, questionModel,overallNgramBackgroundLM):
     smoothing = 0.90
     ngrams = overallNgramBackgroundLM.keys()
     minDistance = sys.maxint
-    d = 0
+    finalAnswer = ""
     for answer, answerModel in answersModel.iteritems():
+        d = -1
         for ngram in ngrams:
             probAnsDist = answerModel[ngram]
             jointProbDist = overallNgramBackgroundLM[ngram]
@@ -127,6 +128,7 @@ def KLDivergence(answersModel, questionModel,overallNgramBackgroundLM):
                 calculation = probQuesDist * math.log(logx)
                 #Add the corresponding ngram entropy to overall distance measure
                 d = d + calculation
+        #print d,answer
         if d < minDistance:
             minDistance = d
             finalAnswer = answer
@@ -139,6 +141,7 @@ if __name__ == "__main__":
     debug = 1
     #Input file
     corpusFilePath = sys.argv[1]
+    testFilePath = sys.argv[2]
     
     questionsMap, answersMap = questionsAnswersMap(corpusFilePath)
     totalQuestionsList = questionsMap.keys()
@@ -152,18 +155,21 @@ if __name__ == "__main__":
     shallowUnigramLM = generateShallowLM(overallUnigramBackgroundLM)
     #LM for the trainint string set S
     trainingStringsUnigramLMList = generateListOfTrainingStringsUnigramLM(totalTrainingStringsList,shallowUnigramLM)
-    
-    #Sample Query
-    query = "Can I ask you some query?"
-    queryUnigramTokens = tokenizeSentenceLowerCase(query)
-    #Question LM p(w|Q)
-    questionModel = generateQuestionModel(overallUnigramBackgroundLM, trainingStringsUnigramLMList, queryUnigramTokens)
-    #Answer Language Model
+    #Answer model
     answersModel = generateUnigramAnswersModel(totalAnswersList,shallowUnigramLM)
-    #Rank the pseudo answer
-    pseudoAnswer = KLDivergence(answersModel, questionModel,overallUnigramBackgroundLM)
-    
-    print pseudoAnswer
+    testFile = open(testFilePath,"r")
+    for line in testFile:
+        #Sample Query
+        #query = "Can I ask you some query?"
+        query = line
+        print "Question:",line
+        queryUnigramTokens = tokenizeSentenceLowerCase(query)
+        #Question LM p(w|Q)
+        questionModel = generateQuestionModel(overallUnigramBackgroundLM, trainingStringsUnigramLMList, queryUnigramTokens)
+        
+        pseudoAnswer = KLDivergence(answersModel, questionModel,overallUnigramBackgroundLM)
+        print "Answer:",pseudoAnswer
+    testFile.close()
     
     
     
