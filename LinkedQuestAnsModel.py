@@ -36,13 +36,6 @@ def generateUnigramLMForString(string, shallowLM):
     unigramFreqDist = nltk.FreqDist(unigramTokens)
     return generateLMFromFreqDist(unigramFreqDist,totalTokensCount, shallowLM)
     
-def generateBigramLMForString(string, shallowLM):
-    unigramTokens = tokenizeSentenceLowerCase(string)
-    bigramTokens = list(nltk.bigrams(unigramTokens))
-    totalTokensCount = len(bigramTokens)
-    bigramFreqDist = nltk.FreqDist(bigramTokens)
-    return generateLMFromFreqDist(bigramFreqDist, totalTokensCount, shallowLM)
-
 def generateListOfTrainingStringsUnigramLM(totalTrainingStringsList, shallowLM):
     trainingStringLMList = []
     for string in totalTrainingStringsList:
@@ -69,7 +62,7 @@ def generateLMFromFreqDist(freqDist,tokensCount, shallowLM):
         lm[token] = float(count) / tokensCount
     return lm
 
-#Function that generates question model based on the equations  5, 2, 3, and 4 in papers
+#Function that generates question model based on the equation 2 
 def generateQuestionModel(overallNgramBackgroundLM, trainingStringsLMList, queryTokens):
     ngrams = overallNgramBackgroundLM.keys()
     questionModel = {}
@@ -99,11 +92,12 @@ def generateQuestionModel(overallNgramBackgroundLM, trainingStringsLMList, query
         questionModel[ngram] = finalProb
     return questionModel
 
-def generateUnigramAnswersModel(answersList,shallowLM):
-    answerModel = {}
-    for answer in answersList:
-        answerModel[answer] = generateUnigramLMForString(answer, shallowLM)
-    return answerModel
+#Generate model based on equation 4
+def generateUnigramsModelsFromList(stringMap,shallowLM):
+    ungigramLM = {}
+    for key, string in stringMap.iteritems():
+        ungigramLM[key] = generateUnigramLMForString(string, shallowLM)
+    return ungigramLM
                 
 def generateShallowLM(entireCorpus):
     corpusLM = {}
@@ -133,42 +127,43 @@ def KLDivergence(answersModel, questionModel,overallNgramBackgroundLM):
             minDistance = d
             finalAnswer = answer
     return finalAnswer
-        
-            
-    
+
+def generatePseudoAnswersMap(answersMap):
+    pseudoAnswersMap = {}
+    for answer, questionsList in answersMap.iteritems():
+        pseudoAnswersMap[answer] = " ".join(questionsList)
+    return pseudoAnswersMap
 
 if __name__ == "__main__":
     debug = 1
-    #Input file
+    #Corpus File
     corpusFilePath = sys.argv[1]
+    #Test File
     testFilePath = sys.argv[2]
     
     questionsMap, answersMap = questionsAnswersMap(corpusFilePath)
     totalQuestionsList = questionsMap.keys()
     totalAnswersList = answersMap.keys()
     
-    #Training set S
-    totalTrainingStringsList = totalQuestionsList + totalAnswersList    
-    #Overall baclground LM with all the training strings for smoothing
-    overallUnigramBackgroundLM = generateOverallUnigramBackgroundLM(totalTrainingStringsList)
+    #Generate pseudo answers map
+    pseudoAnswersMap = generatePseudoAnswersMap(answersMap)
+    #Background model generated for smoothing
+    overallUnigramQuestionsBackgroundLM = generateOverallUnigramBackgroundLM(totalQuestionsList)
+    #skeleton for LMs
+    shallowQuestionBackgroundLM = generateShallowLM(overallUnigramQuestionsBackgroundLM)
+    #Pseudo Answers LM created using equestion 4
+    individualPseudoAnswersLM = generateUnigramsModelsFromList(pseudoAnswersMap, shallowQuestionBackgroundLM)
     
-    shallowUnigramLM = generateShallowLM(overallUnigramBackgroundLM)
-    #LM for the trainint string set S
-    trainingStringsUnigramLMList = generateListOfTrainingStringsUnigramLM(totalTrainingStringsList,shallowUnigramLM)
-    #Answer model
-    answersModel = generateUnigramAnswersModel(totalAnswersList,shallowUnigramLM)
+    
     testFile = open(testFilePath,"r")
     for line in testFile:
         #Sample Query
-        #query = "Can I ask you some query?"
         query = line
         print "Question:",line
         queryUnigramTokens = tokenizeSentenceLowerCase(query)
-        #Question LM p(w|Q)
-        questionModel = generateQuestionModel(overallUnigramBackgroundLM, trainingStringsUnigramLMList, queryUnigramTokens)
-        
-        pseudoAnswer = KLDivergence(answersModel, questionModel,overallUnigramBackgroundLM)
-        print "Answer:",pseudoAnswer
+        #Model generated using the equation 2
+        questionModel = generateQuestionModel(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens)
+        print "Answer:",KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)    
     testFile.close()
     
     
