@@ -62,8 +62,15 @@ def generateLMFromFreqDist(freqDist,tokensCount, shallowLM):
         lm[token] = float(count) / tokensCount
     return lm
 
+def generateModelUsingEquation4(overallNgramBackgroundLM, probDist, smoothing):
+    ngrams = overallNgramBackgroundLM.keys()
+    answerModel = {}
+    for ngram in ngrams:
+        answerModel[ngram] = smoothing * probDist[ngram] + (1-smoothing) * overallNgramBackgroundLM[ngram]
+    return answerModel
+
 #Function that generates question model based on the equation 2 
-def generateQuestionModel(overallNgramBackgroundLM, trainingStringsLMList, queryTokens):
+def generateQuestionModelUsingEquation2(overallNgramBackgroundLM, trainingStringsLMList, queryTokens):
     ngrams = overallNgramBackgroundLM.keys()
     questionModel = {}
     smoothingFactor = 0.90
@@ -91,14 +98,25 @@ def generateQuestionModel(overallNgramBackgroundLM, trainingStringsLMList, query
             finalProb = 0.0
         questionModel[ngram] = finalProb
     return questionModel
+    
 
 #Generate model based on equation 4
-def generateUnigramsModelsFromList(stringMap,shallowLM):
-    ungigramLM = {}
+def generateNgramModelsFromMapUsingEquation4(stringMap,shallowLM,overallNgramBackgroundLM, smoothing):
+    answerModel = {}
     for key, string in stringMap.iteritems():
-        ungigramLM[key] = generateUnigramLMForString(string, shallowLM)
-    return ungigramLM
-                
+        ngramLM = generateUnigramLMForString(string, shallowLM)
+        answerModel[key] = generateModelUsingEquation4(overallNgramBackgroundLM,ngramLM,smoothing)
+    return answerModel
+ 
+#Generate model based on equation 4
+def generateNgramModelsFromListUsingEquation4(stringList,shallowLM,overallNgramBackgroundLM, smoothing):
+    answerModel = {}
+    for string in stringList:
+        ngramLM = generateUnigramLMForString(string, shallowLM)
+        answerModel[string] = generateModelUsingEquation4(overallNgramBackgroundLM,ngramLM,smoothing)
+    return answerModel
+
+               
 def generateShallowLM(entireCorpus):
     corpusLM = {}
     for ngram,count in entireCorpus.iteritems():
@@ -133,37 +151,101 @@ def generatePseudoAnswersMap(answersMap):
     for answer, questionsList in answersMap.iteritems():
         pseudoAnswersMap[answer] = " ".join(questionsList)
     return pseudoAnswersMap
+   
+def generateOverallQuesAnsPairsLM(questionsMap):
+    totalStrings = []
+    for question, answerList in questionsMap.iteritems():
+        totalStrings += [question]+answerList
+    overallAnsQuesPairsBackgroundLM = generateOverallUnigramBackgroundLM(totalStrings)
+    return overallAnsQuesPairsBackgroundLM
 
+def generateQuestionAnswerPairModelUsingEquation4(questionsMap, overallAnsQuesPairsBackgroundLM):
+    questionAnswerPairModel = {}
+    shallowLM = generateShallowLM(overallAnsQuesPairsBackgroundLM)
+    for question, answerList in questionsMap.iteritems():
+        questionProbDist = generateUnigramLMForString(question, shallowLM)
+        questionModel = generateModelUsingEquation4(overallAnsQuesPairsBackgroundLM,questionProbDist, smoothing)
+        for answer in answerList:            
+            ansProbDist = generateUnigramLMForString(answer, shallowLM)
+            ansModel = generateModelUsingEquation4(overallAnsQuesPairsBackgroundLM, ansProbDist, smoothing)
+            questionAnswerPairModel[question+answer] = [questionModel, ansModel]
+    return questionAnswerPairModel
+
+def generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overallUnigramAnswersBackgroundLM, smoothing):
+    
+    questionModel = {}
+    overallAnsQuesPairsBackgroundLM = generateOverallQuesAnsPairsLM(questionsMap)
+    questionAnswerPairModel = generateQuestionAnswerPairModelUsingEquation4(questionsMap, overallAnsQuesPairsBackgroundLM)
+    
+    for ngram in overallUnigramAnswersBackgroundLM.keys():
+        numerator = 0.0
+        denominator = 0.0
+        for key, questionAnswerModel in questionAnswerPairModel.iteritems():
+            answerModel = questionAnswerModel[1]
+            questionModel = questionAnswerModel[0]
+            ngramInAnswerModel = answerModel[ngram]
+            queryInQuestionModel = 1.0
+            for query in queryUnigramTokens:
+                if query not in questionModel:
+                    queryInQuestionModel = 0.0
+                else:
+                    queryInQuestionModel *= questionModel[query]
+            numerator += ngramInAnswerModel * queryInQuestionModel
+            denominator += queryInQuestionModel
+        if denominator != 0:
+            finalProb = numerator / denominator
+        else:
+            finalProb = 0
+        questionModel[ngram] = finalProb
+    return questionModel
+            
+            
 if __name__ == "__main__":
     debug = 1
     #Corpus File
     corpusFilePath = sys.argv[1]
     #Test File
     testFilePath = sys.argv[2]
-    
+    smoothing = 0.90
     questionsMap, answersMap = questionsAnswersMap(corpusFilePath)
     totalQuestionsList = questionsMap.keys()
     totalAnswersList = answersMap.keys()
     
-    #Generate pseudo answers map
-    pseudoAnswersMap = generatePseudoAnswersMap(answersMap)
     #Background model generated for smoothing
     overallUnigramQuestionsBackgroundLM = generateOverallUnigramBackgroundLM(totalQuestionsList)
+    overallUnigramAnswersBackgroundLM = generateOverallUnigramBackgroundLM(totalAnswersList)
     #skeleton for LMs
     shallowQuestionBackgroundLM = generateShallowLM(overallUnigramQuestionsBackgroundLM)
-    #Pseudo Answers LM created using equestion 4
-    individualPseudoAnswersLM = generateUnigramsModelsFromList(pseudoAnswersMap, shallowQuestionBackgroundLM)
-    
-    
+    shallowAnswerBackgroundLM = generateShallowLM(overallUnigramAnswersBackgroundLM)
+
+    #Generate pseudo answers map
+    pseudoAnswersMap = generatePseudoAnswersMap(answersMap)
+    #Pseudo Answers LM created using equation 4    
+    individualPseudoAnswersLM = generateNgramModelsFromMapUsingEquation4(pseudoAnswersMap, shallowQuestionBackgroundLM, overallUnigramQuestionsBackgroundLM, smoothing)
+
+    #Answers and Question LM created using equation 4    
+    individualAnswersLM = generateNgramModelsFromListUsingEquation4(totalAnswersList,shallowAnswerBackgroundLM, overallUnigramAnswersBackgroundLM, smoothing)
     testFile = open(testFilePath,"r")
     for line in testFile:
         #Sample Query
         query = line
+        print "+++++++++++++++++++++++++++++"
+        print "Question Model (Section 3.4)"
+        print "+++++++++++++++++++++++++++++"
         print "Question:",line
         queryUnigramTokens = tokenizeSentenceLowerCase(query)
-        #Model generated using the equation 2
-        questionModel = generateQuestionModel(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens)
+        #Model generated using the equation 2        
+        questionModel = generateQuestionModelUsingEquation2(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens)
         print "Answer:",KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)    
+        print "+++++++++++++++++++++++++++++"
+        print "Answer Model (Section 3.5)"
+        print "+++++++++++++++++++++++++++++"
+        print "Question:",line
+        #Model generated using the equation 6        
+        questionModel = generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overallUnigramAnswersBackgroundLM, smoothing)
+        print "Answer:",KLDivergence(individualAnswersLM, questionModel, overallUnigramAnswersBackgroundLM)    
+
+        
     testFile.close()
     
     
