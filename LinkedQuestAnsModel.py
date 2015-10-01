@@ -70,10 +70,9 @@ def generateModelUsingEquation4(overallNgramBackgroundLM, probDist, smoothing):
     return answerModel
 
 #Function that generates question model based on the equation 2 
-def generateQuestionModelUsingEquation2(overallNgramBackgroundLM, trainingStringsLMList, queryTokens):
+def generateQuestionModelUsingEquation2(overallNgramBackgroundLM, trainingStringsLMList, queryTokens, smoothingFactor):
     ngrams = overallNgramBackgroundLM.keys()
     questionModel = {}
-    smoothingFactor = 0.90
     for ngram in ngrams:
         numerator = 0.0
         denominator = 0.0
@@ -81,15 +80,13 @@ def generateQuestionModelUsingEquation2(overallNgramBackgroundLM, trainingString
             probOfNgramInString = smoothingFactor * trainingStringLM[ngram] + (1-smoothingFactor) * overallNgramBackgroundLM[ngram]
             probQueryTokenInString = 1.0
             for queryToken in queryTokens:
-                if queryToken not in trainingStringLM:
-                    probTokenInString = 0
-                else:
-                    probTokenInString = trainingStringLM[queryToken]
-                if queryToken not in overallNgramBackgroundLM:
-                    probTokenInBackgroundLM = 0
-                else:
+                if queryToken in overallNgramBackgroundLM:
+                    if queryToken not in trainingStringLM:
+                        probTokenInString = 0
+                    else:
+                        probTokenInString = trainingStringLM[queryToken]
                     probTokenInBackgroundLM = overallNgramBackgroundLM[queryToken]
-                probQueryTokenInString *= smoothingFactor * probTokenInString + (1-smoothingFactor) * probTokenInBackgroundLM
+                    probQueryTokenInString *= smoothingFactor * probTokenInString + (1-smoothingFactor) * probTokenInBackgroundLM
             numerator += probOfNgramInString * probQueryTokenInString
             denominator += probQueryTokenInString
         if denominator != 0:
@@ -235,7 +232,7 @@ if __name__ == "__main__":
         print "Question:",line
         queryUnigramTokens = tokenizeSentenceLowerCase(query)
         #Model generated using the equation 2        
-        questionModel = generateQuestionModelUsingEquation2(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens)
+        questionModel = generateQuestionModelUsingEquation2(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens, smoothing)
         print "Answer:",KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)    
         print "+++++++++++++++++++++++++++++"
         print "Answer Model (Section 3.5)"
