@@ -161,6 +161,7 @@ def generateQuestionAnswerPairModelUsingEquation4(questionsMap, overallAnsQuesPa
     shallowLM = generateShallowLM(overallAnsQuesPairsBackgroundLM)
     for question, answerList in questionsMap.iteritems():
         questionProbDist = generateUnigramLMForString(question, shallowLM)
+        
         questionModel = generateModelUsingEquation4(overallAnsQuesPairsBackgroundLM,questionProbDist, smoothing)
         for answer in answerList:            
             ansProbDist = generateUnigramLMForString(answer, shallowLM)
@@ -169,11 +170,9 @@ def generateQuestionAnswerPairModelUsingEquation4(questionsMap, overallAnsQuesPa
     return questionAnswerPairModel
 
 def generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overallUnigramAnswersBackgroundLM, smoothing):
-    
-    questionModel = {}
+    finalQuestionModel = {}
     overallAnsQuesPairsBackgroundLM = generateOverallQuesAnsPairsLM(questionsMap)
     questionAnswerPairModel = generateQuestionAnswerPairModelUsingEquation4(questionsMap, overallAnsQuesPairsBackgroundLM)
-    
     for ngram in overallUnigramAnswersBackgroundLM.keys():
         numerator = 0.0
         denominator = 0.0
@@ -183,18 +182,16 @@ def generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overal
             ngramInAnswerModel = answerModel[ngram]
             queryInQuestionModel = 1.0
             for query in queryUnigramTokens:
-                if query not in questionModel:
-                    queryInQuestionModel = 0.0
-                else:
+                if query in questionModel:
                     queryInQuestionModel *= questionModel[query]
-            numerator += ngramInAnswerModel * queryInQuestionModel
+            numerator += (ngramInAnswerModel * queryInQuestionModel)
             denominator += queryInQuestionModel
         if denominator != 0:
             finalProb = numerator / denominator
         else:
             finalProb = 0
-        questionModel[ngram] = finalProb
-    return questionModel
+        finalQuestionModel[ngram] = finalProb
+    return finalQuestionModel
             
             
 if __name__ == "__main__":
@@ -226,11 +223,12 @@ if __name__ == "__main__":
     for line in testFile:
         #Sample Query
         query = line
+        queryUnigramTokens = tokenizeSentenceLowerCase(query)
         print "+++++++++++++++++++++++++++++"
         print "Question Model (Section 3.4)"
         print "+++++++++++++++++++++++++++++"
         print "Question:",line
-        queryUnigramTokens = tokenizeSentenceLowerCase(query)
+        
         #Model generated using the equation 2        
         questionModel = generateQuestionModelUsingEquation2(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens, smoothing)
         print "Answer:",KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)    
