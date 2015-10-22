@@ -9,8 +9,14 @@ import nltk
 import copy
 import math
 
+reload(sys)  
+sys.setdefaultencoding('utf8')
 def tokenizeSentenceLowerCase(sentence):
-    tokens = [w.lower() for w in nltk.word_tokenize(sentence)]    
+    tokens =  []
+    chars_to_remove = ['.', '!', '?']
+    for w in sentence.split():
+        token = w.translate(None, ''.join(chars_to_remove))
+        tokens.append(token)
     return tokens
 
 
