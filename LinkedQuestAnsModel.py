@@ -1,19 +1,12 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Sep 28 11:20:38 2015
 
-@author: maxsteal
-"""
 import sys
 import nltk
 import copy
 import math
 
-reload(sys)  
-sys.setdefaultencoding('utf8')
 def tokenizeSentenceLowerCase(sentence):
     tokens =  []
-    chars_to_remove = ['.', '!', '?']
+    chars_to_remove = ['.', '!', '?',"\""]
     for w in sentence.split():
         token = w.translate(None, ''.join(chars_to_remove))
         tokens.append(token)
@@ -24,8 +17,10 @@ def questionsAnswersMap(corpusFilePath):
     corpusFile = open(corpusFilePath,"r")
     questionsMap = {}
     answersMap = {}
+    answerList = []
     for line in corpusFile:
         question,answer = line.split("\t")
+        answerList.append(answer)
         if question not in questionsMap:
             questionsMap[question] = [answer]        
         else:
@@ -34,7 +29,7 @@ def questionsAnswersMap(corpusFilePath):
             answersMap[answer] = [question]
         else:
             answersMap[answer].append(question)
-    return questionsMap,answersMap
+    return questionsMap,answersMap, answerList
 
 def generateUnigramLMForString(string, shallowLM):
     unigramTokens = tokenizeSentenceLowerCase(string)
@@ -131,6 +126,7 @@ def KLDivergence(answersModel, questionModel,overallNgramBackgroundLM):
     ngrams = overallNgramBackgroundLM.keys()
     minDistance = sys.maxint
     finalAnswer = ""
+    
     for answer, answerModel in answersModel.iteritems():
         d = -1
         for ngram in ngrams:
@@ -143,10 +139,10 @@ def KLDivergence(answersModel, questionModel,overallNgramBackgroundLM):
                 calculation = probQuesDist * math.log(logx)
                 #Add the corresponding ngram entropy to overall distance measure
                 d = d + calculation
-        #print d,answer
         if d < minDistance:
             minDistance = d
             finalAnswer = answer
+	#print d, answer, "\n"
     return finalAnswer
 
 def generatePseudoAnswersMap(answersMap):
@@ -207,7 +203,7 @@ if __name__ == "__main__":
     #Test File
     testFilePath = sys.argv[2]
     smoothing = 0.90
-    questionsMap, answersMap = questionsAnswersMap(corpusFilePath)
+    questionsMap, answersMap, answerList = questionsAnswersMap(corpusFilePath)
     totalQuestionsList = questionsMap.keys()
     totalAnswersList = answersMap.keys()
     
@@ -226,29 +222,45 @@ if __name__ == "__main__":
     #Answers and Question LM created using equation 4    
     individualAnswersLM = generateNgramModelsFromListUsingEquation4(totalAnswersList,shallowAnswerBackgroundLM, overallUnigramAnswersBackgroundLM, smoothing)
     testFile = open(testFilePath,"r")
+    totalQueries = 0
+    quesModelAccuracy = 0
+    ansModelAccuracy = 0
     for line in testFile:
+        totalQueries += 1
         #Sample Query
-        query = line
+        query, expectedLineNo = line.split("\t")
         queryUnigramTokens = tokenizeSentenceLowerCase(query)
         print "+++++++++++++++++++++++++++++"
         print "Question Model (Section 3.4)"
         print "+++++++++++++++++++++++++++++"
-        print "Question:",line
+        print "Question:",query
         
         #Model generated using the equation 2        
         questionModel = generateQuestionModelUsingEquation2(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens, smoothing)
-        print "Answer:",KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)    
+        quesModelAnswer = KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)     
+        if answerList[int(expectedLineNo)-1].strip() == quesModelAnswer.strip():
+            quesModelAccuracy += 1
+            print "Answer:",quesModelAnswer
+        else:
+            print "Answer (Wrong):",quesModelAnswer
         print "+++++++++++++++++++++++++++++"
         print "Answer Model (Section 3.5)"
         print "+++++++++++++++++++++++++++++"
-        print "Question:",line
+        print "Question:",query
         #Model generated using the equation 6        
         questionModel = generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overallUnigramAnswersBackgroundLM, smoothing)
-        print "Answer:",KLDivergence(individualAnswersLM, questionModel, overallUnigramAnswersBackgroundLM)    
-
+        ansModelAnswer = KLDivergence(individualAnswersLM, questionModel, overallUnigramAnswersBackgroundLM)    
+        if answerList[int(expectedLineNo)-1].strip() == ansModelAnswer.strip():
+            print "Answer:",ansModelAnswer
+            ansModelAccuracy += 1 
+        else:
+            print "Answer (Wrong):",ansModelAnswer
+    print "Accuracy for question model",float(quesModelAccuracy)/totalQueries
+    print "Accuracy for answer model",float(ansModelAccuracy)/totalQueries
         
     testFile.close()
     
     
     
     
+
