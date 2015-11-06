@@ -266,7 +266,7 @@ if __name__ == "__main__":
         #Model generated using the equation 6        
         questionModel = generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overallUnigramAnswersBackgroundLM, smoothing)
         ansModelAnswer = KLDivergence(individualAnswersLM, questionModel, overallUnigramAnswersBackgroundLM)    
-        if quesModelAnswer.strip() in testQuestionAnswerMap[query]:
+        if ansModelAnswer.strip() in testQuestionAnswerMap[query]:
             print "Answer:",ansModelAnswer
             ansModelAccuracy += 1 
         else:
