@@ -6,11 +6,16 @@ import math
 
 def tokenizeSentenceLowerCase(sentence):
     tokens =  []
-    chars_to_remove = ['.', '!', '?',"\""]
-    for w in sentence.split():
-        token = w.translate(None, ''.join(chars_to_remove))
-        tokens.append(token)
+    if sys.argv[3] == "tokenizer":
+        tokens = [w.lower() for w in nltk.word_tokenize(sentence)]    
+    elif sys.argv[3] == "no-tokenizer":
+        chars_to_remove = ['.', '!', '?',"\""]
+        for w in sentence.split():
+            token = w.translate(None, ''.join(chars_to_remove))
+            tokens.append(token)
     return tokens
+#    
+#    return tokens
 
 
 def questionsAnswersMap(corpusFilePath):
@@ -225,10 +230,21 @@ if __name__ == "__main__":
     totalQueries = 0
     quesModelAccuracy = 0
     ansModelAccuracy = 0
+    testFileTuple = []
+    testQuestionAnswerMap = {}
     for line in testFile:
+        test = line.split("\t")
+        query = test[0].strip()
+        expectedAnswer = test[1].strip()
+        testFileTuple.append((query,expectedAnswer))
+        if query in testQuestionAnswerMap:
+            testQuestionAnswerMap[query].append(expectedAnswer)
+        else:
+            testQuestionAnswerMap[query] = [expectedAnswer]
+
+
+    for query, expectedAnswer in testFileTuple:
         totalQueries += 1
-        #Sample Query
-        query, expectedLineNo = line.split("\t")
         queryUnigramTokens = tokenizeSentenceLowerCase(query)
         print "+++++++++++++++++++++++++++++"
         print "Question Model (Section 3.4)"
@@ -238,7 +254,7 @@ if __name__ == "__main__":
         #Model generated using the equation 2        
         questionModel = generateQuestionModelUsingEquation2(overallUnigramQuestionsBackgroundLM,individualPseudoAnswersLM.values(),queryUnigramTokens, smoothing)
         quesModelAnswer = KLDivergence(individualPseudoAnswersLM, questionModel, overallUnigramQuestionsBackgroundLM)     
-        if answerList[int(expectedLineNo)-1].strip() == quesModelAnswer.strip():
+        if quesModelAnswer.strip() in testQuestionAnswerMap[query]:
             quesModelAccuracy += 1
             print "Answer:",quesModelAnswer
         else:
@@ -250,7 +266,7 @@ if __name__ == "__main__":
         #Model generated using the equation 6        
         questionModel = generateQuestionModelUsingEquation6(questionsMap, queryUnigramTokens, overallUnigramAnswersBackgroundLM, smoothing)
         ansModelAnswer = KLDivergence(individualAnswersLM, questionModel, overallUnigramAnswersBackgroundLM)    
-        if answerList[int(expectedLineNo)-1].strip() == ansModelAnswer.strip():
+        if quesModelAnswer.strip() in testQuestionAnswerMap[query]:
             print "Answer:",ansModelAnswer
             ansModelAccuracy += 1 
         else:
