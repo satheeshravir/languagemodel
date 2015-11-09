@@ -243,7 +243,7 @@ if __name__ == "__main__":
             testQuestionAnswerMap[query] = [expectedAnswer]
 
 
-    for query, expectedAnswer in testFileTuple:
+    for query in testQuestionAnswerMap.keys():
         totalQueries += 1
         queryUnigramTokens = tokenizeSentenceLowerCase(query)
         print "+++++++++++++++++++++++++++++"
